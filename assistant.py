@@ -1,45 +1,51 @@
+from __future__ import annotations
+
+import asyncio
+from collections.abc import Sequence
+
 from google import genai
 from google.genai import types
 
 from config import Config
-
+from database import StoredMessage
 from prompts import SYSTEM_PROMPT
 
-client = genai.Client(api_key=Config.GEMINI_KEY)
 
-chat_history = []
+class AssistantError(RuntimeError):
+    pass
 
-while True:
-    user_input = input("Guest: ").strip()
 
-    if not user_input:
-        continue
+class Assistant:
+    def __init__(self) -> None:
+        if not Config.GEMINI_KEY:
+            raise ValueError("GEMINI_KEY is required")
 
-    else:
+        self._client = genai.Client(api_key=Config.GEMINI_KEY)
+
+    async def ask(self, messages: Sequence[StoredMessage]) -> str:
         try:
-            chat_history.append(f"Guest: {user_input}")
+            return await asyncio.to_thread(self._generate, list(messages))
+        except Exception as exc:
+            raise AssistantError("Gemini request failed") from exc
 
-            input_to_model = "\n".join(chat_history) + "\nAI-assistant: "
+    def _generate(self, messages: list[StoredMessage]) -> str:
+        response = self._client.models.generate_content(
+            model=Config.GEMINI_MODEL,
+            contents=[_to_content(message) for message in messages],
+            config=types.GenerateContentConfig(
+                system_instruction=SYSTEM_PROMPT,
+            ),
+        )
 
-            response = client.models.generate_content_stream(
-                model="gemini-3.5-flash",
-                contents=input_to_model,
-                config=types.GenerateContentConfig(
-                        # thinking_config=types.ThinkingConfig(thinking_level="low"), # type: ignore
-                        system_instruction=SYSTEM_PROMPT
-                    ),
-            )
+        text = (response.text or "").strip()
+        if not text:
+            raise AssistantError("Gemini returned an empty response")
+        return text
 
-            print("\nAI-assistant: ", end="", flush=True)
 
-            full_response = ""
-            for chunk in response:
-                print(chunk.text, end="", flush=True)
-                full_response += chunk.text # type: ignore
-
-            print()
-
-            chat_history.append(f"AI-assistant: {full_response}")
-
-        except Exception as e:
-            print(f"Error: {e}")
+def _to_content(message: StoredMessage) -> types.Content:
+    role = "model" if message.role == "assistant" else "user"
+    return types.Content(
+        role=role,
+        parts=[types.Part.from_text(text=message.content)],
+    )
