@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Literal
 
@@ -44,8 +44,12 @@ class Database:
                     updated_at TEXT NOT NULL
                 );
 
-                CREATE INDEX IF NOT EXISTS idx_sessions_active
-                ON sessions (telegram_user_id, telegram_chat_id, is_active);
+                CREATE INDEX IF NOT EXISTS idx_sessions_lookup
+                ON sessions (telegram_user_id, telegram_chat_id, is_active, id);
+
+                CREATE UNIQUE INDEX IF NOT EXISTS idx_sessions_one_active
+                ON sessions (telegram_user_id, telegram_chat_id)
+                WHERE is_active = 1;
 
                 CREATE TABLE IF NOT EXISTS messages (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,23 +74,9 @@ class Database:
 
     async def get_or_create_session(self, telegram_user_id: int, telegram_chat_id: int) -> int:
         async with self._lock:
-            cursor = await self.connection.execute(
-                """
-                SELECT id
-                FROM sessions
-                WHERE telegram_user_id = ?
-                  AND telegram_chat_id = ?
-                  AND is_active = 1
-                ORDER BY id DESC
-                LIMIT 1
-                """,
-                (telegram_user_id, telegram_chat_id),
-            )
-            row = await cursor.fetchone()
-            await cursor.close()
-
-            if row is not None:
-                return int(row["id"])
+            session_id = await self._get_active_session_id(telegram_user_id, telegram_chat_id)
+            if session_id is not None:
+                return session_id
 
             now = _utc_now()
             cursor = await self.connection.execute(
@@ -97,7 +87,9 @@ class Database:
                 (telegram_user_id, telegram_chat_id, now, now),
             )
             await self.connection.commit()
-            return int(cursor.lastrowid)
+            session_id = int(cursor.lastrowid)
+            await cursor.close()
+            return session_id
 
     async def add_message(self, session_id: int, role: MessageRole, content: str) -> None:
         async with self._lock:
@@ -133,10 +125,7 @@ class Database:
         rows = await cursor.fetchall()
         await cursor.close()
 
-        return [
-            StoredMessage(role=row["role"], content=row["content"])
-            for row in rows
-        ]
+        return [StoredMessage(role=row["role"], content=row["content"]) for row in rows]
 
     async def reset_session(self, telegram_user_id: int, telegram_chat_id: int) -> int:
         async with self._lock:
@@ -152,13 +141,38 @@ class Database:
                 (_utc_now(), telegram_user_id, telegram_chat_id),
             )
             await self.connection.commit()
-            return int(cursor.rowcount)
+            rowcount = int(cursor.rowcount)
+            await cursor.close()
+            return rowcount
 
     async def close(self) -> None:
         if self._connection is not None:
             await self._connection.close()
             self._connection = None
 
+    async def _get_active_session_id(
+        self,
+        telegram_user_id: int,
+        telegram_chat_id: int,
+    ) -> int | None:
+        cursor = await self.connection.execute(
+            """
+            SELECT id
+            FROM sessions
+            WHERE telegram_user_id = ?
+              AND telegram_chat_id = ?
+              AND is_active = 1
+            ORDER BY id DESC
+            LIMIT 1
+            """,
+            (telegram_user_id, telegram_chat_id),
+        )
+        row = await cursor.fetchone()
+        await cursor.close()
+        if row is None:
+            return None
+        return int(row["id"])
+
 
 def _utc_now() -> str:
-    return datetime.now(timezone.utc).isoformat()
+    return datetime.now(UTC).isoformat()

@@ -24,6 +24,11 @@ data/
 *.pkl
 *.joblib
 
+# Build artifacts
+build/
+dist/
+*.egg-info/
+
 # Keys
 *.key
 certs/
@@ -41,6 +46,7 @@ __pycache__/
 pip-log.txt
 pip-delete-this-directory.txt
 .pytest_cache/
+.ruff_cache/
 .coverage
 htmlcov/
 .tox/
