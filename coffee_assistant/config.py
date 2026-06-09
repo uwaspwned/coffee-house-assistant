@@ -37,7 +37,7 @@ class Settings:
         settings = cls(
             gemini_key=_get_env("GEMINI_KEY", ""),
             telegram_bot_token=_get_env("TELEGRAM_BOT_TOKEN", ""),
-            gemini_model=_get_env("GEMINI_MODEL", "gemini-3.5-flash"),
+            gemini_model=_get_env("GEMINI_MODEL", "gemini-2.5-flash"),
             database_path=database_path,
             history_limit=_get_int("HISTORY_LIMIT", 12),
             max_user_message_length=_get_int("MAX_USER_MESSAGE_LENGTH", 2000),

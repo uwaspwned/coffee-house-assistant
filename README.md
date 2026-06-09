@@ -12,6 +12,10 @@ Telegram bot for a small cafe assistant powered by Gemini. Users ask the bot thr
 `/assistant your request`; the bot stores per-user sessions in SQLite and keeps a short
 conversation history for contextual recommendations.
 
+## Demo
+
+[![Watch the demo](https://img.youtube.com/vi/QNWROOXK4Ac/maxresdefault.jpg)](https://www.youtube.com/watch?v=QNWROOXK4Ac)
+
 ## Features
 
 - Telegram bot built with aiogram 3.

@@ -136,11 +136,13 @@ async def set_commands(bot: Bot) -> None:
     )
 
 
+from coffee_assistant.proxy import session
+
 async def run(settings: Settings | None = None) -> None:
     settings = settings or Settings.from_env()
     configure_logging(settings.log_level)
 
-    bot = Bot(token=settings.telegram_bot_token)
+    bot = Bot(token=settings.telegram_bot_token, session=session)
     dp = create_dispatcher()
     db = Database(settings.database_path)
     assistant = Assistant(settings)
